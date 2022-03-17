@@ -1,7 +1,372 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-1 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Pathtracer 1</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2022</h1>
+<h1 align="middle">Project 3-1: CS 184 Pathtracer 1</h1>
+<h2 align="middle">Kay Du, Jeffery Chen</h2>
+<h2 align="middle">CS184-sp22</h2>
+<a href="https://cal-cs184-student.github.io/sp22-project-webpages-nobugnohair/proj3-1/index.html">Project 3-1 Webpage</a>
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p style="line-height:2">
+In this project we implemented the entire process of rendering through global illumination. The basic assumption is that our viewing window is a camera and we shoot rays from each pixel, tracing the rays and adding the illuminance whenever the ray hits an object or light source. To implement this, we begin by mapping points from the object space to the camera space, and for each pixel in the camera space, we generate n sample rays pointing in the direction of the corresponding points in the world space.
+</p>
+
+<p style="line-height:2">
+To trace each sample ray, we first need to efficiently determine if it intersects with a primitive in the world, and we achieve this through a BVH binary tree-like acceleration structure.Then we need to calculate the illuminance along the ray, which is the sum of zero bounce to infinitive bounce rays. Zero bounce simply means rays directly shooting out of light source, one bounce means ray traveling from light source to object surface to camera, and for each additional bounce the ray hits one more object or light source. We implemented this through a recursive function, and terminated it based on max depth parameter and Russian Roulette. When tracing the incoming ray from the light source, we can either perform uniform hemisphere sampling, or importance sampling, which guarantees that the sample ray points toward a light source. Eventually, we speed up the sampling process by adaptively adjusting the sample per pixel, based on whether the distribution of sampled illumination falls within a 95% confidence interval.
+</p>
+<p style="line-height:2">
+For most problems we have encountered, we tried to infer the bug in the code by examining the difference between our rendered image and the correct result. For example, in adaptive sampling, our first attempt resulted in ceilings with high sample rates (red), as exposed to an area of medium sample rates shown in the spec. We deduced that there is too much noise in the lightning on the ceiling because this lightning only comes from >1 bounce of light and our  Russian Roulette kills many of them on the first bounce. We fixed this by guaranteeing at least a 2 bounce ray regardless of Russian Roulette, and successfully generated the correct result!
+
+</p>
+
+<h2 align="middle">Part 1: Ray Generation and Scene Intersection</h2>
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/1-banana.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part : Banana with normal shading. </figcaption>
+      </td>
+      <td>
+        <img src="images/1-empty.png" align="middle" width="300px"/>
+        <figcaption align="middle">Task 1: Empty with normal shading. </figcaption>
+      </td>
+      <td>
+        <img src="images/1-spheres.png" align="middle" width="300px"/>
+        <figcaption align="middle">Task 1: Spheres with normal shading. </figcaption>
+      </td>
+      <td>
+    </tr>
+  </table>
+</div>
+
+
+<h3 align="middle"> Ray generation and primitive intersection pipeline</h3>
+<p style="line-height:2">
+In order to generate a camera ray, we took the input of a sensor sample coordinate and transformed it from the world space to the camera space with the hFov and vFov tangent values. Then we calculated the direction of the ray in world space by applying the c2w transform matrix and normalizing it. Finally, we created a Ray object with the resulting direction and the camera position before clipping the range with nClip and fClip. To test its intersection with the primitives, we set its equation with the primitive
+</p>
+<p style="line-height:2">
+Our triangle intersection algorithm starts by calculating the barycentric coordinates of the ray-plane intersection point with the Moller Trumbore algorithm. The resulting alpha 1-b1-b2 is our t value. If t is within our range between min_t and max_t, we determine if the intersection point is within our triangle by checking if alpha, beta, and gamma are all positive, which indicates the ray intersects with the triangle at t and vice versa.
+</p>
+
+
+
+
+
+<h2 align="middle">Part 2: Bounding Volume Hierarchy</h2>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/2-beast.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 2: Beast with BVH acceleration.</figcaption>
+      </td>
+      <td>
+        <img src="images/2-cow.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 2: Cow with BVH acceleration.</figcaption>
+      </td>
+      <td>
+        <img src="images/2-maxplanck.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 2: Max Planck with BVH acceleration.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h3 align="middle"> BVH construction algorithm</h3>
+<p style="line-height:2">
+We constructed our BVH data structure through the following steps: we first calculated the centroid for all primitives in the node; then we split the centroid along the axis with the max length, and create the left and right nodes by comparing each primitive’s chosen axis with the centroid’s chosen axis; we finally recurse the above steps for both left and right node, until each node contains less than a threshold amount of primitives. A side note of implementation: we can not create an array of primitives to store primitives in the left and right nodes during this recursion since the program will destroy the pointer once the function exits the stack, so we had to directly manipulate the objects by accessing their memory.
+</p>
+
+<h4 align="middle">Before BVH acceleration</h4>
+<div align="middle">
+    <table border="2" >
+        <tr>
+            <th></th>
+            <th>BVH Build Time</th>
+            <th>Render Time</th>
+            <th>No. Intersection Tests / Ray</th>
+
+        </tr>
+        <tr>
+            <td>Cow</td>
+            <td>0.002 sec</td>
+            <td>39.19 sec</td>
+            <td>2232</td>
+            
+            
+        </tr>
+        <tr>
+            <td>Max Planck</td>
+            <td>0.002 sec</td>
+            <td>490 sec</td>
+            <td>25280</td>
+        </tr>
+    </table>
+</div>
+<h4 align="middle">After BVH acceleration</h4>
+<div align="middle">
+    <table border="2" >
+        <tr>
+            <th></th>
+            <th>BVH Build Time</th>
+            <th>Render Time</th>
+            <th>No. Intersection Tests / Ray</th>
+
+        </tr>
+        <tr>
+            <td>Cow</td>
+            <td>0.0029 sec</td>
+            <td>0.1046 sec</td>
+            <td>0.47</td>
+            
+            
+        </tr>
+        <tr>
+            <td>Max Planck</td>
+            <td>0.0433 sec</td>
+            <td>0.1451 sec</td>
+            <td>0.51</td>
+        </tr>
+    </table>
+</div>
+
+
+<h3 align="middle"> Before vs. After BVH comparison</h3>
+<p style="line-height:2">
+The statistics match our expectations. After implementing BVH acceleration, the BVH build time slightly increased, and the rendering time and number of intersection tests per ray significantly reduced. Comparing statistics for the cow before and after the acceleration, we see a surprising reduction of around 370 times in time and 5000 times in the number of intersections tested. This performance boost even exceeds our expectation of log2 acceleration (log2 of 2000 is around 11, not 0.47), and shows how many rays probably simply misses the object body. Perhaps implementing one box test would boost the performance a lot.
+Comparing statistics from the cow and the max planck image, we see that the number of triangles in max planck is approximately 10 times that in cow (naive algorithm tests intersection with every primitive, 25280 vs 2232). The rendering time before BVH acceleration also has a roughly 10 times difference (490 sec vs 39.19 sec). However, after implementing our acceleration the number of intersections tested are roughly the same (we would expect a 3 time difference, log 2 of 10 is roughly 3). This shows how in practical cases our algorithm would accelerate larger scale rendering tasks better.
+
+</p>
+
+<div align="middle">
+            <h2>Part 3: Direct Illumination</h2>
+            <h3>Direct lightning implementation with uniform sampling and importance sampling</h3>
+            <p>
+                For uniform hemisphere sampling, we take the outgoing ray pointing towards the camera and sample an incoming direction using a uniform hemisphere sampler. We then create a new ray originating from the hit point, trace it in the sampled direction, and if it intersects an object, add the object’s emission weighted by the surface bsdf, cosine theta, 2 * pi (pdf for hemisphere sampling), and number of samples. Note that if the object is not a light source this emission would be zero. In the implementation, we also adjusted the min_t of our new ray by a small amount to avoid it intersecting with itself due to numerical precision issues when tracing it.
+                </p>
+            <p>
+For importance sampling lights, instead of sampling an incoming direction from the uniform hemisphere sample, we loop over each light source and directly sample directions that would hit the light source. We then trace this ray, and if it intersects with anything in the middle, we return 0 illuminance for this sample, assuming there is an object between the light source and our hit point surface. Otherwise, we add the weighted emission from the light source. In the implementation, we also need to adjust min_t, and moreover, max_t as well since we want to avoid the case when the ray intersects the surface of the light source but we mistake it as another object.
+            </p>
+            <h3>Direct lightning demo</h3>
+            <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/3-bunny_64_32_H.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with uniform sampling</figcaption>
+                    </td>
+                    <td>
+                      <img src="images/3-bunny_64_32.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with importance sampling</figcaption>
+                    </td>
+                </tr>
+              </table>
+              <h3>Different light ray samples comparison</h3>
+              <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/3-CBbunny_1_1.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with 1 light ray</figcaption>
+                    </td>
+                    <td>
+                      <img src="images/3-CBbunny_1_4.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with 4 light rays</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                      <img src="images/3-CBbunny_1_16.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with 16 light ray</figcaption>
+                    </td>
+                    <td>
+                      <img src="images/3-CBbunny_1_64.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Bunny rendered with 64 light rays</figcaption>
+                    </td>
+                </tr>
+            </table>
+            <p>
+            As the number of light rays increases, the soft shadows become less noisy especially on the edges. In images rendered with 1 light ray, there are much more noise pixels in the shadow area with high contrast, because the pixel will be completely black when the only light ray hits an intersecting object. On the other hand, sampling multiple light rays would create a more smooth transition of shadow by averaging rays that both intersect (black) and not intersect objects (bright).
+            </p>
+            <h3>Uniform sampling and importance sampling comparison</h3>
+            <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/3-CBspheres_64_32_H.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Sphere rendered with uniform sampling</figcaption>
+                    </td>
+                    <td>
+                      <img src="images/3-CBspheres_64_32.png" align="middle"/>
+                      <figcaption align="middle">Part 3: Sphere rendered with importance sampling</figcaption>
+                    </td>
+                </tr>
+              </table>
+            
+
+            
+        </div>
+        <div align="middle">
+            <h2>Part 4: Global Illumination</h2>
+            <h3>Global Illumination Implementation</h3>
+            <p style="line-height:2">
+                For the nth call to our indirect lighting function (the nth bounce), we first check if the outgoing ray (pointing towards camera) has exceeded the maximum depth parameter. If not, we would first call the direct lighting function and add illuminance from the nth bounce to the overall result. Then, we decide whether we terminate through the Russian Roulette method. If we decide to proceed, we would sample a new incoming direction using a cosine weighted hemisphere sampler. We would then create a new array with this direction and depth n + 1, and stack the n+1th call to the indirect lighting function. This would then calculate illuminance from a randomly sampled n+1 bounce ray.            </p>
+            <h3>Global Illumination Demo</h3>
+            <table style="width=100%">
+              <tr>
+                  <td>
+                    <img src="images/4-bench.png" align="middle" width="300px"/>
+                    <figcaption align="middle">Part 4: Bench global illumination</figcaption>
+                  </td>
+                  <td>
+                    <img src="images/4-bunny-m100.png" align="middle" width="300px"/>
+                    <figcaption align="middle">Part 4: Bunny global illumination</figcaption>
+                  </td>
+                  <td>
+                    <img src="images/4-spheres_1024_4.png" align="middle" width="300px"/>
+                    <figcaption align="middle">Part 4: Sphere global illumination</figcaption>
+                  </td>
+              </tr>
+            </table>
+            <h3>Direct illumination and indirect illumination comparison</h3>
+            <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/4-blob_direct.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Blob with only direct illumination</figcaption>
+                    </td>
+                    <td>
+                      <img src="images/4-blob_indirect.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Blob with only indirect illumination</figcaption>
+                    </td>
+                </tr>
+              </table>
+              <p>In the image with only direct illumination, the indentations are relatively dark because they do not receive any reflected light. There is more contrast between light and shadow and the edges of the bumps are clearer. In the image with only indirect illumination, only the indentations are lit up because they receive most of the indirect light. Due to the lack of direct light, the surface of the blob is mostly dark and the brightest area occurs where the indentation is the deepest.
+            </p>
+            <h3>Different max ray depth comparison</h3>
+            <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/4-bunny-m0.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Bunny max depth 0</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/4-bunny-m1.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Bunny max depth 1</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <img src="images/4-bunny-m2.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Bunny max depth 2</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/4-bunny-m3.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Bunny max depth 3</figcaption>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <img src="images/4-bunny-m100.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Bunny max depth 100</figcaption>
+                    </td>
+                </tr>
+              </table>
+              <p>
+                When m = 0, only the light source is visible and everything else is completely dark. When m = 1, one bounce radiance is included and the areas where the light source directly lights up are shown. It is noticeable that the ceiling around the light source is still black because the surface is parallel with the light rays. As max_ray_depth increases, the overall brightness of the image increases as light rays are reflected more. This change is especially noticeable on the corners and edges along the walls, where the reflected rays are the main source of light. When m reaches 100, the ceiling reflects the different colors of the nearest side walls-the left half is red-ish and the right half is blue-ish. This phenomenon occurs due to the fact that the ceiling is only lit up by indirect light rays that mostly trace back to the side walls. Therefore, as the max ray depth increases, there are more nuances of color in the image due to multiple bounces of rays on surfaces with different reflectance.
+              </p>
+              <h3>Different sampling per pixel comparison</h3>
+              <table style="width=100%">
+                <tr>
+                    <td>
+                      <img src="images/4-spheres_1_4.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Sphere 1 sample per pixel</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/4-spheres_2_4.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Sphere 2 sample per pixel</figcaption>
+                      </td>
+                </tr>
+                <tr>
+                    <td>
+                      <img src="images/4-spheres_4_4.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Sphere 4 sample per pixel</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/4-spheres_8_4.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Sphere 8 sample per pixel</figcaption>
+                      </td>
+                </tr>
+                <tr>
+                    <td>
+                      <img src="images/4-spheres_16_4.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Sphere 16 sample per pixel</figcaption>
+                    </td>
+                    <td>
+                        <img src="images/4-spheres_64_4.png" align="middle"/>
+                        <figcaption align="middle">Part 4: Sphere 64 sample per pixel</figcaption>
+                      </td>
+                </tr>
+                <tr>
+                    <td>
+                      <img src="images/4-spheres_1024_4.png" align="middle"/>
+                      <figcaption align="middle">Part 4: Sphere 1024 sample per pixel</figcaption>
+                    </td>
+                </tr>
+            </table>
+            <p>
+                We can see images with lower samples per pixel are very noisy and have artifacts, while the image with 1024 samples per pixel has a smooth color. There are two factors contributing to this phenomenon. First, since we are using a monte carlo estimator, the illuminance of each pixel is taken randomly, and having fewer samples means there is bigger variance in the sampled illuminance, resulting in some pixels in low sample number images appearing to have simply the wrong color. Second, increasing the sample per pixel and averaging them is essentially super sampling. Therefore images with low sample per pixel has abrupt changes in color while images with high sample per pixel appear to have a much smoother color transition.
+            </p>
+
+          </div>
+
+        <div align="middle">
+            <h2>Part 5: Adaptive Sampling</h2>
+            <h3>Adaptive Sampling Implementation</h3>
+            <p style="line-height:2">
+                We keep track of two additional variables during sampling for each pixel: the sum of illuminance and the sum of illuminance square sampled so far. At the end of each batch, we calculate the mean and variance based on the two sum tracked above, and determine if the distribution of illuminance falls within the 95% confidence interval of +- 0.05*mean. If the distribution converges from the above test, we then stop the sampling for this pixel; if not, we proceed to sampling the next batch.
+            </p>
+            <h3>Adaptive Sampling Demo</h3>
+            <table style="width=100%">
+              <tr>
+                  <td>
+                    <img src="images/5-bunny.png" align="middle"/>
+                    <figcaption align="middle">Part 5: Bunny rendered with adpative sampling</figcaption>
+                  </td>
+                  <td>
+                    <img src="images/5-bunny_rate.png" align="middle"/>
+                    <figcaption align="middle">Part 5: Sampling rate for different regions in the bunny image</figcaption>
+                  </td>
+              </tr>
+            </table>
+          </div>
+
+</body>
 </html>
