@@ -1,7 +1,151 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 3-2 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Pathtracer 2</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2022</h1>
+<h1 align="middle">Project 3-2: CS 184 Pathtracer 2</h1>
+<h2 align="middle">Kay Du, Jeffery Chen</h2>
+<h2 align="middle">CS184-sp22</h2>
+<a href="https://cal-cs184-student.github.io/sp22-project-webpages-nobugnohair/proj3-2/index.html">Project 3-2 Webpage</a>
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p style="line-height:2">
+We implemented part 1 and part 4 of this project. In part 1, we implemented the bsdf for 2 materials: glass and mirror. To be specific, the goal is to calculate the incoming ray direction and pdf for it based on material properties. Mirror simply reflects all incoming light, and glass materials both reflect and refract lights, which we can simulate by assigning a binary random variable to decide if it refracts or reflects based on the index of reflection of the material. In part 4,  we implemented the field of depth visual effect by simulating a converging lens instead of a pinhole for our camera. We calculated the sample ray direction based on the special properties of the converging lens. After this, we can adjust the focus and circle of confusion of our image by specifying the apertures and focal length.
+
+
+<h2 align="middle">Part 1: Mirror and Glass Materials</h2>
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/spheres_m0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 1: CBspheres with m = 0. </figcaption>
+      </td>
+      <td>
+        <img src="images/spheres_m1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 1: CBspheres with m = 1. </figcaption>
+      </td>
+      <td>
+        <img src="images/spheres_m2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 1: CBspheres with m = 2. </figcaption>
+      </td>
+      
+    </tr>
+    <tr>
+        <td>
+          <img src="images/spheres_m3.png" align="middle" width="300px"/>
+          <figcaption align="middle">Part 1: CBspheres with m = 3. </figcaption>
+        </td>
+        <td>
+          <img src="images/spheres_m4.png" align="middle" width="300px"/>
+          <figcaption align="middle">Part 1: CBspheres with m = 4. </figcaption>
+        </td>
+        <td>
+          <img src="images/spheres_m5.png" align="middle" width="300px"/>
+          <figcaption align="middle">Part 1: CBspheres with m = 5. </figcaption>
+        </td>
+        
+    </tr>
+    <tr>
+      <td>
+        <img src="images/spheres_m100.png" align="middle" width="300px"/>
+        <figcaption align="middle">Part 1: CBspheres with m = 100. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+<p style="line-height:2">
+0 to 1 bounce: The light source can be seen on the spheres.<br>
+1 to 2 bounce: The walls can be seen on the sphere with mirror bsdf.<br>
+2 to 3 bounce: The walls can be seen on the sphere with glass bsdf. Also notice the shadow of the glass sphere is lit up.<br>
+3 to 4 bounce: Notice the bottom of the glass sphere. The bottom edge is now lit up.<br>
+4 to 5 bounces and 5 to 100 bounces: The entire scene is more lit up as the number of maximum depth continues to increase.
+</p>
+
+<h3 align="middle"> Explanation</h3>
+<p style="line-height:2">
+In the beginning with 0 max depth, only light directly emitting from the light source can be seen by the camera. As we increase to 1 bounce, light that hits the spheres and is reflected to the camera can be seen. Note that the glass sphere has a noisy light source reflection because not all lights are reflected in the glass. When we increase to 2 bounces, light hitting the surroundings of the room and then hitting the mirror, and finally reflected towards the camera can be seen. 3 bounces are the point where refracted light that travels through the glass sphere will be directed towards the camera. The shadow of the glass sphere is lit up for this reason: light directly travels through the glass sphere, hits the ground, and is reflected toward the camera. At 4 bounce, the bottom edge of the glass sphere is lit up because the light that travels through the sphere, hits the ground, and hits the bottom of the sphere again would be caught by the camera. Finally, as we gradually increase the maximum depth, the light ray samples have a better probability of being caught by the camera, and therefore the entire scene is more and more illuminated.
+</p>
+
+<h2 align="middle">Part 4: Depth of Field</h2>
+
+<p style="line-height:2">
+A pinhole camera model is a simplified model which assumes that for each light source, it only emits one single ray that would pass through the pinhole and hit the image scene. The thin-lens camera model is a more complex model which uses a convex lens to concentrate many rays emitting from a light source to a single point on the image scene at a focal length distance away. In this model, if the image scene is further or closer than the perfect focal distance, the many rays would not concentrate on a single point.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/dragon_0.1b_4.6d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.1, d = 4.6. </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_0.25b_4.6d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.25, d = 4.6. </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_0.5b_4.6d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.5, d = 4.6. </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_1.0b_4.6d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 1.0, d = 4.6. </figcaption>
+      </td>
+      
+    </tr>
+    <tr>
+      <td>
+        <img src="images/dragon_0.25b_4.2d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.25, d = 4.2 </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_0.25b_4.4d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.25, d = 4.4 </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_0.25b_4.6d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.25, d = 4.6 </figcaption>
+      </td>
+      <td>
+        <img src="images/dragon_0.25b_4.8d.png" align="middle" width="250px"/>
+        <figcaption align="middle">CBdragon with b = 0.25, d = 4.8 </figcaption>
+      </td>
+      
+    </tr>
+  </table>
+</div>
+
+
+
+
+</body>
 </html>
