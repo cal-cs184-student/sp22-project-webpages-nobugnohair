@@ -1,7 +1,489 @@
-<html>
-	<head>
-	</head>
-	<body>
-		Project 4 here
-	</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Pathtracer 2</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2022</h1>
+<h1 align="middle">Project 4: CS 184 Cloth</h1>
+<h2 align="middle">Kay Du, Jeffery Chen</h2>
+<h2 align="middle">CS184-sp22</h2>
+<a href="https://cal-cs184-student.github.io/sp22-project-webpages-nobugnohair/proj4/index.html">Project 4 Webpage</a>
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p style="line-height:2">
+In this project we completed all necessary steps to perform a realistic physical cloth simulation. We began by defining the basic objects that compose a cloth, namely point masses and springs. We then implemented the Verlet integration which updates the next position of a point mass based on existing forces on it and the current position. This force involves gravity and spring forces. To prevent the cloth from overstretching, we limited the maximum displacement of any spring to be 10% of its resting length. To realize a more realistic simulation, we also handled the collision between the cloth and other objects, and self collisions between point masses of the cloth. This was achieved by adding a correction vector before a point mass passes through a solid surface, or when two point masses are two close to each other. This enables our simulation to simulate cloth falling onto an object, or folding itself. Finally, we implemented various types of shaders to simulate realistic light or textures for our physical objects.
+
+
+<h2 align="middle">Part 1: Masses and springs</h2>
+
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/1-pinned2.png" align="middle" width="800px"/>
+        <figcaption align="middle">Part 1: pinned2.json. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/1-no_shearing.png" align="middle" width="800px"/>
+        <figcaption align="middle">Part 1: without any shearing. </figcaption>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <img src="images/1-shearing.png" align="middle" width="800px"/>
+        <figcaption align="middle">Part 1: with only shearing. </figcaption>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <img src="images/1-all.png" align="middle" width="800px"/>
+        <figcaption align="middle">Part 1: with all constraints. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+<h2 align="middle">Part 2: Simulation via numerical integration</h2>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/2-resting.png" align="middle" width="800px"/>
+        <figcaption align="middle">pinned4.json resting. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/2-density+.png" align="middle" width="400px"/>
+        <figcaption align="middle">High density. </figcaption>
+      </td>
+      <td>
+        <img src="images/2-density-.png" align="middle" width="400px"/>
+        <figcaption align="middle">Low density. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/2-d+.png" align="middle" width="400px"/>
+        <figcaption align="middle">High damping factor. </figcaption>
+      </td>
+      <td>
+        <img src="images/2-d-.png" align="middle" width="400px"/>
+        <figcaption align="middle">Low damping factor. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/2-ks+.png" align="middle" width="400px"/>
+        <figcaption align="middle">High Ks. </figcaption>
+      </td>
+      <td>
+        <img src="images/2-ks-.png" align="middle" width="400px"/>
+        <figcaption align="middle">Low Ks. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+Density: For high density, the cloth is composed of more point masses, and we see many fluctuations after the cloth has fallen due to interactions between point masses. For low density, as there are less point masses, we see much less fluctuations in the process. Moreover, it is obvious that higher density results in lower final height of the bottom tip of the cloth since it is heavier.
+</p>
+
+<p style="line-height:2">
+Damping: When the damping force is small, the object experiences negligible loss of energy, swings back and forth multiple times before converging to steady state. When the damping force is large, the object steadily converges to steady state without fluctuations.
+</p>
+
+
+<p style="line-height:2">
+Ks: Small ks represents a small spring force. In this state, the cloth appears to be very loose, and during the process of falling down, we can see many wrinkles on the cloth surface. On the other hand, a big ks represents a huge spring force, and the cloth is very tightened under this state. Correspondingly, we see little wrinkles on the cloth, since the spring between points are very stretched out.
+</p>
+
+<h2 align="middle">Part 3: Handling collisions with other objects</h2>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/3-500ks.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+      <td>
+        <img src="images/3-5000ks.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 5000. </figcaption>
+      </td>
+      <td>
+        <img src="images/3-50000ks.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+  It is evident that under a low ks state, there is minimal string force maintaining the position between point masses, and therefore the entire cloth appears to be affected mainly by gravity, dragging down over the sphere. On the other hand, under a high ks state, the string force counteracts the gravity force more and the entire cloth appears to be more elastic and more held up.
+</p>
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/3-rest_on_plane.png" align="middle" width="800px"/>
+        <figcaption align="middle">Resting peacefully on the plane. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h2 align="middle">Part 4: Handling self-collisions</h2>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-ks5000_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 15; Ks = 5000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks5000_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 15; Ks = 5000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks5000_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 15; Ks = 5000. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-density1500_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1500.</figcaption>
+      </td>
+      <td>
+        <img src="images/4-density1500_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1500.<figcaption>
+      </td>
+      <td>
+        <img src="images/4-density1500_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1500.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-density1_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1.</figcaption>
+      </td>
+      <td>
+        <img src="images/4-density1_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1.</figcaption>
+      </td>
+      <td>
+        <img src="images/4-density1_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Density = 1.</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+  Density: Greater density leads to more collisions between point masses, thus more wrinkles on the cloth surface seen in the resting state. Also we can see the cloth fall and fold much faster. Smaller density makes the cloth flatter and smoother since there are minimal collisions between point masses.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-ks50000_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks50000_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks50000_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-ks500_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks500_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks500_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+<p style="line-height:2">
+  Ks: Greater ks creates stronger spring forces, which pull on the point masses more during falling, making the material more stretched and less flexible. Smaller ks creates a softer material appearance, and we see many wrinkles when the cloth falls since point masses are more likely to collide with a small string force counteracting gravity.
+</p>
+
+<!-- <div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-density_c1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-density_c15.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 5000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-density_c1500.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div> -->
+
+
+
+
+
+
+
+
+<!-- <div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/4-ks5000_0.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 500. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks5000_1.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 5000. </figcaption>
+      </td>
+      <td>
+        <img src="images/4-ks5000_2.png" align="middle" width="300px"/>
+        <figcaption align="middle">Ks = 50000. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div> -->
+
+
+
+
+<h2 align="middle">Part 5: Shaders</h2>
+
+
+
+<h3 align="middle"> Shader Definition</h3>
+<p style="line-height:2">
+  The vertex shader accepts vertex positions, normals and uv coordinates and transforms these attributes, changing the geometric properties of the vertex positions and normals. Shader programs takes in the transformed attributes and applying lightning effect based on the camera position, the vertex position and normal, and the designated algorithm or texture.
+</p>
+
+<h3 align="middle"> Blinn-Phong Model</h3>
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-all.png" align="middle" width="400px"/>
+        <figcaption align="middle">Blinn-Phong shading with all lightings. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-specular.png" align="middle" width="400px"/>
+        <figcaption align="middle">Specular lighting only. </figcaption>
+      </td>
+      
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-ambient.png" align="middle" width="400px"/>
+        <figcaption align="middle">Ambient lighting only. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-diffuse.png" align="middle" width="400px"/>
+        <figcaption align="middle">Diffuse lighting only. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+  The Blinn-Phong shading model is a simple algorithm that creates a realistic lightning effect by calculating the diffuse, specular, and ambient lights reflected by an object. The diffuse light represents lights reflected off the object based on its surface angle with the source. The specular light represents lights reflected towards the viewing camera. The ambient light adds constant colors to account for disregarded illumination and fill in black shadows.
+</p>
+
+<h3 align="middle"> Texture Mapping</h3>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-texture.png" align="middle" width="800px"/>
+        <figcaption align="middle">Customized texture. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h3 align="middle"> Bunmp vs. Desplacement Mapping</h3>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-b0.png" align="middle" width="500px"/>
+        <figcaption align="middle">Bump mapping on the sphere. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-b1.png" align="middle" width="500px"/>
+        <figcaption align="middle">Bump mapping on the cloth. </figcaption>
+      </td>
+      
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-d0.png" align="middle" width="500px"/>
+        <figcaption align="middle">Displacement mapping on the sphere. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-d1.png" align="middle" width="500px"/>
+        <figcaption align="middle">Displacement mapping on the cloth. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+  Although both shaders create texture with depth on the object surface, displacement actually mutates the physical position of the vertices while bumping only creates the effect through shadows. We can obviously see the physical bumps along the surfaces of the object shaded with displacement shader.
+</p>
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-b16.png" align="middle" width="500px"/>
+        <figcaption align="middle">Bump mapping with 16 resolution. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-b128.png" align="middle" width="500px"/>
+        <figcaption align="middle">Bump mapping with 128 resolution. </figcaption>
+      </td>
+      
+    </tr>
+  </table>
+</div>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-d16.png" align="middle" width="500px"/>
+        <figcaption align="middle">Displacement mapping with 16 resolution. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-d128.png" align="middle" width="500px"/>
+        <figcaption align="middle">Displacement mapping with 128 resolution. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p style="line-height:2">
+We can compare the geometry across the 4 images. We can see under bump mapping the sphere maintains its geometry. However, under displacement mapping, the sphere is distorted to different degrees. When the resolution is low, we see abrupt changes in the height of surface and high aliasing. When the resolution is high, although aliasing still exists, the entire surface remains relatively smooth.
+
+</p>
+
+<h3 align="middle"> Mirror Mapping</h3>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/5-m0.png" align="middle" width="500px"/>
+        <figcaption align="middle">Mirror texture mapping on the sphere. </figcaption>
+      </td>
+      <td>
+        <img src="images/5-m1.png" align="middle" width="500px"/>
+        <figcaption align="middle">Mirror texture mapping on the cloth. </figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+</body>
 </html>
